@@ -21,6 +21,7 @@ const (
 )
 
 func main() {
+	messageSendSleepStop := time.Now()
 	for {
 		time.Sleep(time.Second * 5)
 
@@ -47,6 +48,12 @@ func main() {
 		}
 
 		log.Println(statusActive)
+
+		if time.Now().Before(messageSendSleepStop) {
+			continue
+		}
+
+		log.Println(url)
 		message, sendErr := SendMessage(Message{
 			PhoneNumber: "+79164352929",
 			Text:        "Бегом за билетом! \n https://tickets.stoyanie.ru/shop/bilet-na-masleniczu-2024/",
@@ -57,7 +64,7 @@ func main() {
 		}
 
 		jsonMessage, _ := json.MarshalIndent(message, "", "\t")
-		log.Printf("Message sent: %v\n", jsonMessage)
-		time.Sleep(1 * time.Hour)
+		log.Printf("Message sent: %v\n", string(jsonMessage))
+		messageSendSleepStop = time.Now().Add(time.Minute * 10)
 	}
 }
