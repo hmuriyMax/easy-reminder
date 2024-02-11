@@ -1,70 +1,58 @@
 package main
 
 import (
-	"encoding/json"
-	"io"
-	"log"
-	"net/http"
-	"strings"
+	"context"
 	"time"
 )
 
 type Status string
 
 const (
-	statusActive   Status = "AVAILABLE"
-	statusInactive Status = "OUT OF STOCK"
-	statusUnknown  Status = "UNKNOWN"
+	phoneNumber = "+79213918575"
 
-	unavailableMessage = "Нет в наличии"
-	url                = "https://tickets.stoyanie.ru/shop/bilet-na-masleniczu-2024/"
+	parkingURL      = "https://tickets.stoyanie.ru/shop/parkovka-p1-4/"
+	parkingFastRack = "https://tickets.stoyanie.ru/shop/parkovka-fast-track-2/"
+	transferURL     = "https://tickets.stoyanie.ru/shop/transfer-tuda-obratno-otpravlenie-iz-moskvy-v-800-16-marta-2024/"
+
+	checkDelay          = time.Second * 5
+	stopMessageDuration = time.Minute * 10
 )
 
 func main() {
-	messageSendSleepStop := time.Now()
-	for {
-		time.Sleep(time.Second * 5)
-
-		response, err := http.Get(url)
-		if err != nil {
-			log.Printf("%s: %v\n", statusUnknown, err)
-			continue
+	var (
+		parking = Monitoring{
+			Name:                "Parking",
+			Url:                 parkingURL,
+			PhoneNumber:         phoneNumber,
+			CheckDelay:          checkDelay,
+			StopMessageDuration: stopMessageDuration,
 		}
 
-		if response == nil || response.StatusCode != http.StatusOK {
-			log.Println(statusUnknown)
-			continue
+		parkingFT = Monitoring{
+			Name:                "Parking Fast Track",
+			Url:                 parkingFastRack,
+			PhoneNumber:         phoneNumber,
+			CheckDelay:          checkDelay,
+			StopMessageDuration: stopMessageDuration,
 		}
 
-		buf := new(strings.Builder)
-		if _, err = io.Copy(buf, response.Body); err != nil {
-			log.Printf("%s: %v\n", statusUnknown, err)
-			continue
+		transfer = Monitoring{
+			Name:                "Transfer",
+			Url:                 transferURL,
+			PhoneNumber:         phoneNumber,
+			CheckDelay:          checkDelay,
+			StopMessageDuration: stopMessageDuration,
 		}
+	)
 
-		if strings.Contains(buf.String(), unavailableMessage) {
-			log.Println(statusInactive)
-			continue
-		}
+	ctx := context.Background()
 
-		log.Println(statusActive)
+	parking.RunAsync(ctx)
+	parkingFT.RunAsync(ctx)
+	transfer.RunAsync(ctx)
 
-		if time.Now().Before(messageSendSleepStop) {
-			continue
-		}
-
-		log.Println(url)
-		message, sendErr := SendMessage(Message{
-			PhoneNumber: "+79164352929",
-			Text:        "Бегом за билетом! \n https://tickets.stoyanie.ru/shop/bilet-na-masleniczu-2024/",
-		})
-		if sendErr != nil {
-			log.Printf("Error sending message: %v\n", sendErr)
-			continue
-		}
-
-		jsonMessage, _ := json.MarshalIndent(message, "", "\t")
-		log.Printf("Message sent: %v\n", string(jsonMessage))
-		messageSendSleepStop = time.Now().Add(time.Minute * 10)
+	select {
+	case <-ctx.Done():
+		return
 	}
 }
