@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-type Status string
-
 const (
 	phoneNumber = "+79213918575"
 

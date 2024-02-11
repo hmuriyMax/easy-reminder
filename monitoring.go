@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+type Status string
+
 const (
 	statusActive   Status = "AVAILABLE"
 	statusInactive Status = "OUT OF STOCK"
@@ -71,6 +73,7 @@ func (m *Monitoring) checker() error {
 		return nil
 	}
 
+	// TODO: получше парсить
 	if strings.Contains(buf.String(), unavailableMessage) {
 		log.Printf("%s: %s\n", m.Name, statusInactive)
 		return nil
