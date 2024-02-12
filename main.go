@@ -27,7 +27,7 @@ func main() {
 		}
 
 		parkingFT = Monitoring{
-			Name:                "Parking Fast Track",
+			Name:                "Parking FT",
 			Url:                 parkingFastRack,
 			PhoneNumber:         phoneNumber,
 			CheckDelay:          checkDelay,

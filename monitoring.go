@@ -19,6 +19,7 @@ const (
 	statusUnknown  Status = "UNKNOWN"
 
 	unavailableMessage = "Нет в наличии"
+	availableMessage   = "корзин"
 )
 
 type Monitoring struct {
@@ -58,28 +59,33 @@ func (m *Monitoring) Run(ctx context.Context) error {
 func (m *Monitoring) checker() error {
 	response, err := http.Get(m.Url)
 	if err != nil {
-		log.Printf("%s: %s: %v\n", m.Name, statusUnknown, err)
+		log.Printf("%s:\t\t %s: %v\n", m.Name, statusUnknown, err)
 		return nil
 	}
 
 	if response == nil || response.StatusCode != http.StatusOK {
-		log.Printf("%s: %s\n", m.Name, statusUnknown)
+		log.Printf("%s:\t\t %s\n", m.Name, statusUnknown)
 		return nil
 	}
 
 	buf := new(strings.Builder)
 	if _, err = io.Copy(buf, response.Body); err != nil {
-		log.Printf("%s: %s: %v\n", m.Name, statusUnknown, err)
+		log.Printf("%s:\t\t %s: %v\n", m.Name, statusUnknown, err)
 		return nil
 	}
 
 	// TODO: получше парсить
 	if strings.Contains(buf.String(), unavailableMessage) {
-		log.Printf("%s: %s\n", m.Name, statusInactive)
+		log.Printf("%s:\t\t %s\n", m.Name, statusInactive)
 		return nil
 	}
 
-	log.Printf("%s: %s (%s)\n", m.Name, statusActive, m.Url)
+	if !strings.Contains(buf.String(), availableMessage) {
+		log.Printf("%s:\t\t %s\n", m.Name, statusUnknown)
+		return nil
+	}
+
+	log.Printf("%s:\t\t %s (%s)\n", m.Name, statusActive, m.Url)
 
 	if time.Now().Before(m.messageSendSleepStop) {
 		return nil
