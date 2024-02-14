@@ -1,7 +1,8 @@
-package main
+package monitoring
 
 import (
 	"context"
+	"easy-reminder/internal/pkg/sender"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,13 +24,13 @@ const (
 )
 
 type Monitoring struct {
-	Name                string
-	Url                 string
-	PhoneNumber         string
-	CheckDelay          time.Duration
-	StopMessageDuration time.Duration
+	Name        string
+	Url         string
+	PhoneNumber string
+	CheckDelay  time.Duration
+	Senders     []sender.Sender
 
-	messageSendSleepStop time.Time
+	prevStatus Status
 }
 
 func (m *Monitoring) RunAsync(ctx context.Context) {
@@ -42,7 +43,6 @@ func (m *Monitoring) RunAsync(ctx context.Context) {
 }
 
 func (m *Monitoring) Run(ctx context.Context) error {
-	m.messageSendSleepStop = time.Now()
 	for {
 		select {
 		case <-time.After(m.CheckDelay):
@@ -60,48 +60,55 @@ func (m *Monitoring) checker() error {
 	response, err := http.Get(m.Url)
 	if err != nil {
 		log.Printf("%s:\t\t %s: %v\n", m.Name, statusUnknown, err)
+		m.prevStatus = statusUnknown
 		return nil
 	}
 
 	if response == nil || response.StatusCode != http.StatusOK {
 		log.Printf("%s:\t\t %s\n", m.Name, statusUnknown)
+		m.prevStatus = statusUnknown
 		return nil
 	}
 
 	buf := new(strings.Builder)
 	if _, err = io.Copy(buf, response.Body); err != nil {
 		log.Printf("%s:\t\t %s: %v\n", m.Name, statusUnknown, err)
+		m.prevStatus = statusUnknown
 		return nil
 	}
 
 	// TODO: получше парсить
 	if strings.Contains(buf.String(), unavailableMessage) {
 		log.Printf("%s:\t\t %s\n", m.Name, statusInactive)
+		m.prevStatus = statusInactive
 		return nil
 	}
 
 	if !strings.Contains(buf.String(), availableMessage) {
 		log.Printf("%s:\t\t %s\n", m.Name, statusUnknown)
+		m.prevStatus = statusUnknown
 		return nil
 	}
 
 	log.Printf("%s:\t\t %s (%s)\n", m.Name, statusActive, m.Url)
 
-	if time.Now().Before(m.messageSendSleepStop) {
+	if m.prevStatus == statusActive {
 		return nil
 	}
-	message, sendErr := SendMessage(Message{
-		PhoneNumber: m.PhoneNumber,
-		Text:        fmt.Sprintf("Йо, тут \"%s\" доступен в %s! \n Ссыл очка: %s", m.Name, time.Now().Format(time.DateTime), m.Url),
-	})
-	if sendErr != nil {
-		log.Printf("Error sending message: %v\n", sendErr)
-		return nil
-	}
+	m.prevStatus = statusActive
+	for _, sndr := range m.Senders {
+		message, sendErr := sndr.Send(&sender.Message{
+			ID:   m.PhoneNumber,
+			Text: fmt.Sprintf("Тут %s стал доступен в %s! \n Ссыл очка: %s", m.Name, time.Now().Format(time.DateTime), m.Url),
+		})
+		if sendErr != nil {
+			log.Printf("Error sending message: %v\n", sendErr)
+			return nil
+		}
 
-	jsonMessage, _ := json.MarshalIndent(message, "", "\t")
-	log.Printf("Message sent: %v\n", string(jsonMessage))
-	m.messageSendSleepStop = time.Now().Add(m.StopMessageDuration)
+		jsonMessage, _ := json.MarshalIndent(message, "", "\t")
+		log.Printf("Message sent: %v\n", string(jsonMessage))
+	}
 
 	return nil
 }
